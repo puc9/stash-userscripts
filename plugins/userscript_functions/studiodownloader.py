@@ -93,9 +93,18 @@ query getStudio($id : ID!) {
         images {
             url
         }
+        urls {
+            url
+        }
         parent {
             name
             id
+            urls {
+                url
+            }
+            images {
+                url
+            }
         }
     }
 }
@@ -110,11 +119,12 @@ query getStudio($id : ID!) {
        return result.get("findStudio")
     return
 
-def update_studio(studio, studio_data):
+def update_studio(endpoint, studio, studio_data):
     query = """
 mutation studioimageadd($input: StudioUpdateInput!) {
     studioUpdate(input: $input) {
         image_path
+        url
         parent_studio {
             id
         }
@@ -129,18 +139,63 @@ mutation studioimageadd($input: StudioUpdateInput!) {
         parent_studio = get_studio_by_stash_id(parent_stash_id)
         if parent_studio:
             parent_id = parent_studio["id"]
+        else:
+            parent_id = create_studio(endpoint, studio_data["parent"])
+
     log.debug(f'parent_id: {parent_id}')
 
     variables = {
         "input": {
             "id": studio["id"],
             "image": None,
+            "url": None,
             "parent_id": parent_id
         }
     }
     if studio_data["images"]:
         variables["input"]["image"] = studio_data["images"][0]["url"]
+    if studio_data["urls"]:
+        variables["input"]["url"] = studio_data["urls"][0]["url"]
     call_graphql(query, variables)
+
+def create_studio(endpoint, studio_data):
+    log.debug(studio_data)
+    query = """
+mutation studioCreate($input: StudioCreateInput!) {
+    studioCreate(input: $input) {
+        id
+        name
+        image_path
+        url
+        stash_ids {
+            endpoint
+            stash_id
+        }
+    }
+}
+"""
+    variables = {
+        "input": {
+            "name": studio_data["name"],
+            "image": None,
+            "url": None,
+            "stash_ids": {
+                "endpoint": endpoint, 
+                "stash_id": studio_data["id"]
+            }
+        }
+    }
+    if studio_data["images"]:
+        variables["input"]["image"] = studio_data["images"][0]["url"]
+    if studio_data["urls"]:
+        variables["input"]["url"] = studio_data["urls"][0]["url"]
+
+    log.debug(variables)
+    result = call_graphql(query, variables)
+    if result:
+        log.debug(result)
+        return result["studioCreate"]["id"]
+
 
 def get_studio(studio_id):
     query = """
@@ -201,4 +256,4 @@ def update_studio_from_stashbox(studio_id, endpoint, remote_site_id):
     studioboxdata = get_studio_from_stashbox(endpoint, remote_site_id)
     log.debug(studioboxdata)
     if studioboxdata:
-        result = update_studio(studio, studioboxdata)
+        result = update_studio(endpoint, studio, studioboxdata)
